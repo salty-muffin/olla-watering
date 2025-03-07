@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "olla_watering")(type "KiCad")(uri "${KIPRJMOD}/olla_watering.pretty")(options "")(descr ""))
+)
