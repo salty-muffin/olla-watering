@@ -81,3 +81,12 @@ class Swimmer:
             statistics.fmean(self._samples[-self._samples_full : -1])
             >= self._threshold_full
         )
+
+    def reset(self) -> None:
+        """
+        Reset the state of the sensor.
+
+        Returns:
+            None
+        """
+        self._samples = [0.0] * max(self._samples_empty, self._samples_full)
