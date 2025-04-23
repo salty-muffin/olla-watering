@@ -27,6 +27,7 @@ class Swimmer:
         threshold_empty=0.1,
         threshold_full=0.9,
     ) -> None:
+        self.pin_number = pin_number
         self._interval = interval_ms
         self._samples_empty = samples_empty
         self._samples_full = samples_full
