@@ -1,4 +1,5 @@
 from machine import Pin, Timer
+import time
 
 VALVE_PINS = [9, 8, 7, 6]
 SWITCH_PINS = [5, 4, 3, 2]
@@ -30,7 +31,7 @@ tim.init(freq=1, mode=Timer.PERIODIC, callback=tick)
 
 
 while True:
-    if any([not switch.value() for switch in switches]):
+    if any([bool(switch.value()) for switch in switches]):
         led.on()
     else:
         led.off()
