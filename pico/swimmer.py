@@ -28,7 +28,6 @@ class Swimmer:
         threshold_empty=0.1,
         threshold_full=0.9,
     ) -> None:
-        self.pin_number = pin_number
         self._pin = Pin(pin_number, Pin.IN, Pin.PULL_UP)
         self._interval = interval_ms
         self._samples_empty = samples_empty
@@ -61,29 +60,25 @@ class Swimmer:
             return True
         return False
 
-    def empty(self) -> float:
+    def empty(self) -> tuple[bool, float]:
         """
         Check if the container is empty based on recent sensor readings.
 
         Returns:
             float: True if the mean of recent samples is below or equal to empty threshold
         """
-        return (
-            statistics.fmean(self._samples[-self._samples_empty : -1])
-            <= self._threshold_empty
-        )
+        mean = statistics.fmean(self._samples[-self._samples_empty : -1])
+        return (mean <= self._threshold_empty, mean)
 
-    def full(self) -> float:
+    def full(self) -> tuple[bool, float]:
         """
         Check if the container is full based on recent sensor readings.
 
         Returns:
             float: True if the mean of recent samples is above or equal to full threshold
         """
-        return (
-            statistics.fmean(self._samples[-self._samples_full : -1])
-            >= self._threshold_full
-        )
+        mean = statistics.fmean(self._samples[-self._samples_full : -1])
+        return (mean >= self._threshold_full, mean)
 
     def reset(self) -> None:
         """
