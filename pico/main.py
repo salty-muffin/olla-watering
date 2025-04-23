@@ -10,7 +10,7 @@ SWIMMER_PINS = [5, 4, 3, 2]
 def check_time_slot(
     time_shift_hours: float, time_slot_length_hours: float, now: tuple
 ) -> bool:
-    return time_shift_hours <= now[3] <= time_slot_length_hours + time_shift_hours
+    return time_shift_hours <= now[4] <= time_slot_length_hours + time_shift_hours
 
 
 def error_blinking(led: Pin, duration_s=-1) -> None:
@@ -60,7 +60,17 @@ def main():
 
     # Initialize RTC
     rtc = RTC()
-    rtc.init((2025, 5, 1, 0, 0, 0, 0, 0))
+    rtc.datetime((2025, 5, 1, 0, 0, 0, 0, 0))
+
+    # Fill sensor data one full time
+    starting_time = time.ticks_ms()
+    print("Initializing sensor data stack...")
+    while time.ticks_diff(time.ticks_ms(), starting_time) < settings[
+        "interval_ms"
+    ] * max(settings["samples_empty"], settings["samples_full"]):
+        for swimmer in swimmers:
+            swimmer.update()
+        time.sleep_ms(1)
 
     completed_fill = False
     while True:
@@ -113,15 +123,35 @@ def main():
 
                         # Wait until olla is full or over max filling time
                         starting_time = time.ticks_ms()
-                        while (
-                            not swimmer.full()
-                            and time.ticks_diff(time.ticks_ms(), starting_time)
+                        swimmer_state = swimmer.full()
+                        # --- DEBUG
+                        print(
+                            swimmer_state[1],
+                            not swimmer_state[0],
+                            time.ticks_diff(time.ticks_ms(), starting_time)
+                            / (1000 * 60)
+                            < max_fill_time,
+                            (
+                                not swimmer.full()[0]
+                                and time.ticks_diff(time.ticks_ms(), starting_time)
+                                / (1000 * 60)
+                                < max_fill_time
+                            ),
+                            time.ticks_diff(time.ticks_ms(), starting_time),
+                            time.ticks_diff(time.ticks_ms(), starting_time)
+                            / (1000 * 60),
+                            max_fill_time,
+                        )
+                        # --- DEBUG
+                        while not swimmer.full()[0] and (
+                            time.ticks_diff(time.ticks_ms(), starting_time)
                             / (1000 * 60)
                             < max_fill_time
-                        ):
+                        ):  # TODO: Fix conditional statement in this loop?
                             for swimmer in swimmers:
                                 swimmer.update()
                             time.sleep_ms(1)
+
                         print(
                             f"Filled in {time.ticks_diff(time.ticks_ms(), starting_time) / (1000 * 60):.2f}min"
                         )

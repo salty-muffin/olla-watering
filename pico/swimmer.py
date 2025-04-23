@@ -1,6 +1,9 @@
 from machine import Pin
 import time
-import statistics
+
+
+def mean(l: list[float]) -> float:
+    return sum(l) / len(l)
 
 
 class Swimmer:
@@ -67,8 +70,8 @@ class Swimmer:
         Returns:
             float: True if the mean of recent samples is below or equal to empty threshold
         """
-        mean = statistics.fmean(self._samples[-self._samples_empty : -1])
-        return (mean <= self._threshold_empty, mean)
+        average = mean(self._samples[-self._samples_empty : -1])
+        return (average <= self._threshold_empty, average)
 
     def full(self) -> tuple[bool, float]:
         """
@@ -77,8 +80,8 @@ class Swimmer:
         Returns:
             float: True if the mean of recent samples is above or equal to full threshold
         """
-        mean = statistics.fmean(self._samples[-self._samples_full : -1])
-        return (mean >= self._threshold_full, mean)
+        average = mean(self._samples[-self._samples_full : -1])
+        return (average >= self._threshold_full, average)
 
     def reset(self) -> None:
         """
