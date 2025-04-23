@@ -1,0 +1,23 @@
+{
+    "time_shift_hours": 0,
+    "time_slot_length_hours": 1,
+    "max_fill_time_per_valve_minutes": [
+        5,
+        5,
+        5,
+        5
+    ],
+    "overfill_time_per_valve_minutes": [
+        5,
+        5,
+        5,
+        5
+    ],
+    "simmer_sensor_parameters": {
+        "interval_ms": 100,
+        "samples_empty": 200,
+        "samples_full": 20,
+        "threshold_empty": 0.1,
+        "threshold_full": 0.9
+    }
+}
