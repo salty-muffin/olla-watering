@@ -1,62 +1,44 @@
 import json
 from swimmer import Swimmer
 import time
-from machine import Pin, RTC
+from machine import Pin, RTC, Timer
 
 VALVE_PINS = [9, 8, 7, 6]
 SWIMMER_PINS = [5, 4, 3, 2]
 
 
-def check_time_slot(
-    time_shift_hours: float, time_slot_length_hours: float, now: tuple
-) -> bool:
-    return time_shift_hours <= now[4] <= time_slot_length_hours + time_shift_hours
-
-
-def error_blinking(led: Pin, duration_s=-1) -> None:
-    """
-    Blinks the LED in an error pattern (0.1s on, 2s off) for a specified duration.
-
-    Args:
-        duration_s (float, optional): Duration in seconds to blink the LED.
-            If negative (default: -1), the function will blink indefinitely.
-
-    Returns:
-        None
-
-    Note:
-        This function blocks execution until the duration is complete or indefinitely
-        if duration_s is negative.
-    """
-    starting_time = time.ticks_ms()
-    while (
-        duration_s < 0
-        or time.ticks_diff(time.ticks_ms(), starting_time) / 1000 > duration_s
-    ):
-        led.on()
-        time.sleep(0.1)
-        led.off()
-        time.sleep(2)
-
-
 def main():
+    # Setup
     led = Pin("LED", Pin.OUT)
+
+    # Initialize timer for error blinking
+    timer = Timer(-1)
 
     # Open and read the JSON file
     print("Importing settings")
     try:
         with open("settings.json", "r") as file:
             settings = json.load(file)
-        print(settings)
+        for key, value in settings.items():
+            print(f"{key}: {value}")
     except (OSError, ValueError) as e:
         print(f"Error loading settings: {e}")
-        error_blinking(led)
+        log_error(str(e))
+        error_blinking(led, timer)
 
-    # Initialize swimmers
+    # Initialize swimmers & valves
     swimmers = [Swimmer(pin) for pin in SWIMMER_PINS]
     valves = [Pin(n, Pin.OUT) for n in VALVE_PINS]
-    overfill_times = settings["overfill_time_per_valve_seconds"]
-    max_fill_time = settings["max_fill_time_per_valve_minutes"]
+
+    # Copy Settings for easier readability
+    overfill_times_s = settings["overfill_time_per_valve_seconds"]
+    max_fill_time_s = settings["max_fill_time_per_valve_seconds"]
+    interval_ms = settings["interval_ms"]
+    samples_empty = settings["samples_empty"]
+    samples_full = settings["samples_full"]
+    time_shift_h = settings["time_shift_hours"]
+    time_slot_length_h = settings["time_slot_length_hours"]
+    threshold = settings["threshold"]
 
     # Initialize RTC
     rtc = RTC()
@@ -64,132 +46,144 @@ def main():
 
     # Fill sensor data one full time
     starting_time = time.ticks_ms()
-    print("Initializing sensor data stack...")
-    while time.ticks_diff(time.ticks_ms(), starting_time) < settings[
-        "interval_ms"
-    ] * max(settings["samples_empty"], settings["samples_full"]):
+    full_cycle = interval_ms * max(samples_empty, samples_full)
+    print(f"Initializing sensor data stack for {full_cycle / 1000}s...")
+    while time.ticks_diff(time.ticks_ms(), starting_time) < full_cycle:
         for swimmer in swimmers:
             swimmer.update()
-        time.sleep_ms(1)
+        time.sleep_ms(10)
 
-    completed_fill = False
+    # Loop
+    sequence_index = len(swimmers)
+    filling = False
+    overfilling = False
+    time_slot = False
+    starting_time = time.ticks_ms()
     while True:
-        # Update swimmer data
-        for swimmer in swimmers:
-            swimmer.update()
+        # Start the sequence only at the beginning of the timeslot
+        if check_time_slot(time_shift_h, time_slot_length_h, rtc.datetime()):
+            if not time_slot:
+                print("Time slot is now, starting watering program...")
+                sequence_index = 0
+                time_slot = True
+        else:
+            if time_slot:
+                time_slot = False
 
-        if (
-            check_time_slot(
-                settings["time_shift_hours"],
-                settings["time_slot_length_hours"],
-                rtc.datetime(),
-            )
-            and not completed_fill
-        ):
-            print(
-                f"Check valid: {settings['time_shift_hours']} <= {rtc.datetime()} <= {settings['time_shift_hours'] + settings['time_slot_length_hours']}"
-            )
+        # Update all swimmers
+        updated = any([swimmer.update() for swimmer in swimmers])
+
+        # Fill ollas if in sequence
+        if updated and sequence_index < len(swimmers):
             try:
-                print("Time slot okay, now starting watering program...")
+                if not overfilling:
+                    # Fill the current olla if it is empty
+                    if not filling and swimmers[sequence_index].empty() < threshold:
+                        print(
+                            f"Olla {sequence_index} is empty, start filling valve {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
+                        )
+                        valves[sequence_index].on()
+                        filling = True
+                        starting_time = time.ticks_ms()
+                    # Skip it if it is still full
+                    elif not filling and swimmers[sequence_index].full() >= threshold:
+                        print(f"Olla {sequence_index} is full")
+                        sequence_index += 1
+                    # Stop filling if it has been filled or the maximum fill time has been reached
+                    elif filling and swimmers[sequence_index].full() >= threshold:
+                        print(
+                            f"Filled olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
+                        )
+                        print(
+                            f"Now topping off for {overfill_times_s[sequence_index]}s"
+                        )
+                        filling = False
+                        overfilling = True
+                        starting_time = time.ticks_ms()
+                    elif (
+                        filling
+                        and time.ticks_diff(time.ticks_ms(), starting_time) / 1000
+                        >= max_fill_time_s[sequence_index]
+                    ):
+                        print(
+                            f"Filled olla {sequence_index} for the max fill time of {max_fill_time_s[sequence_index]}s"
+                        )
+                        filling = False
+                        log_error(
+                            f"Stopped filling olla {sequence_index} due to max fill time"
+                        )
+                        sequence_index += 1
+                        error_blinking(led, timer, blocking=False)
 
-                # Check if its the right time slot to start the program
-                for (
-                    swimmer,
-                    valve,
-                    overfill_time,
-                    max_fill_time,
-                    swimmer_pin,
-                    valve_pin,
-                ) in zip(
-                    swimmers,
-                    valves,
-                    overfill_times,
-                    max_fill_time,
-                    SWIMMER_PINS,
-                    VALVE_PINS,
+                # After filling, possibly top it off a bit longer
+                elif (
+                    time.ticks_diff(time.ticks_ms(), starting_time) / 1000
+                    >= overfill_times_s[sequence_index]
                 ):
-                    print(f"Checking swimmer at pin {swimmer_pin}")
-
-                    empty, mean = swimmer.empty()
                     print(
-                        f"Swimmer mean: {mean:.2f}, state: {'empty' if empty else 'full'}"
+                        f"Topped off olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
                     )
-                    if empty:
-                        print(
-                            f"Is empty, start filling valve {valve_pin} for max {max_fill_time}min..."
-                        )
-
-                        valve.on()
-
-                        # Wait until olla is full or over max filling time
-                        starting_time = time.ticks_ms()
-                        swimmer_state = swimmer.full()
-                        # --- DEBUG
-                        print(
-                            swimmer_state[1],
-                            not swimmer_state[0],
-                            time.ticks_diff(time.ticks_ms(), starting_time)
-                            / (1000 * 60)
-                            < max_fill_time,
-                            (
-                                not swimmer.full()[0]
-                                and time.ticks_diff(time.ticks_ms(), starting_time)
-                                / (1000 * 60)
-                                < max_fill_time
-                            ),
-                            time.ticks_diff(time.ticks_ms(), starting_time),
-                            time.ticks_diff(time.ticks_ms(), starting_time)
-                            / (1000 * 60),
-                            max_fill_time,
-                        )
-                        # --- DEBUG
-                        while not swimmer.full()[0] and (
-                            time.ticks_diff(time.ticks_ms(), starting_time)
-                            / (1000 * 60)
-                            < max_fill_time
-                        ):  # TODO: Fix conditional statement in this loop?
-                            for swimmer in swimmers:
-                                swimmer.update()
-                            time.sleep_ms(1)
-
-                        print(
-                            f"Filled in {time.ticks_diff(time.ticks_ms(), starting_time) / (1000 * 60):.2f}min"
-                        )
-
-                        print(f"Starting overfill for {overfill_time}s")
-                        # Starting extra fill time
-                        starting_time = time.ticks_ms()
-                        while (
-                            time.ticks_diff(time.ticks_ms(), starting_time) / 1000
-                            < overfill_time
-                        ):
-                            for swimmer in swimmers:
-                                swimmer.update()
-                            time.sleep_ms(1)
-
-                        print("Closing valve")
-                        # Close valve
-                        valve.off()
-
-                    completed_fill = True
+                    valves[sequence_index].off()
+                    overfilling = False
+                    sequence_index += 1
             except Exception as e:
                 print(f"Error filling ollas: {e}")
-                error_blinking(led, 30)
+                for valve in valves:
+                    valve.off()
+                log_error(str(e))
+                error_blinking(led, timer, blocking=False)
 
-        elif not check_time_slot(
-            settings["time_shift_hours"],
-            settings["time_slot_length_hours"],
-            rtc.datetime(),
-        ):
+        # Shut all valves if sequence is over as a precaution
+        if sequence_index == len(swimmers):
             print(
-                f"Check invalid: {settings['time_shift_hours']} <= {rtc.datetime()} <= {settings['time_shift_hours'] + settings['time_slot_length_hours']}"
+                "All ollas have been checked and are full, ending watering program for today"
             )
-            completed_fill = False
+            for valve in valves:
+                valve.off()
+            sequence_index += 1
 
-        for valve in valves:
-            valve.off()
+        # Sleep a little bit in every loop to keep the cpu chill
+        time.sleep_ms(10)
 
-        time.sleep_ms(100)
+
+def check_time_slot(
+    time_shift_hours: float, time_slot_length_hours: float, now: tuple
+) -> bool:
+    """
+    Check if the current time falls within a specified time slot.
+
+    Args:
+        time_shift_hours (float): The start hour of the time slot (offset from 0).
+        time_slot_length_hours (float): The duration of the time slot in hours.
+        now (tuple): A time tuple where the 5th element (index 4) represents the current hour.
+
+    Returns:
+        bool: True if the current time is within the time slot, False otherwise.
+    """
+    return time_shift_hours <= now[4] <= time_slot_length_hours + time_shift_hours
+
+
+def error_blinking(led: Pin, timer: Timer, blocking=True) -> None:
+    """
+    Blinks the LED.
+
+    Args:
+        blocking (boolean): Should the blinking occur in the background
+    """
+
+    def tick(timer):
+        led.toggle()
+
+    timer.init(freq=1, mode=Timer.PERIODIC, callback=tick)
+
+    if blocking:
+        while True:
+            time.sleep(1)
+
+
+def log_error(error: str, error_file="errors.log"):
+    with open(error_file, "a") as file:
+        file.write(f"[{time.ticks_ms() / 1000}] {error}\n")
 
 
 if __name__ == "__main__":

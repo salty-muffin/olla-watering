@@ -10,16 +10,13 @@ class Swimmer:
     """
     A class for water level detection using a floating sensor connected to a GPIO pin.
 
-    The Swimmer monitors water levels by sampling a sensor at regular intervals and
-    using statistical analysis to determine if a container is empty or full.
+    The Swimmer monitors water levels by sampling a sensor at regular intervals.
 
     Attributes:
         pin_number (int): GPIO pin number where the sensor is connected
         interval_ms (int): Sampling interval in milliseconds
         samples_empty (int): Number of samples to consider when checking if empty
         samples_full (int): Number of samples to consider when checking if full
-        threshold_empty (float): Threshold below which the container is considered empty (0.0-1.0)
-        threshold_full (float): Threshold above which the container is considered full (0.0-1.0)
     """
 
     def __init__(
@@ -28,15 +25,11 @@ class Swimmer:
         interval_ms=100,
         samples_empty=200,
         samples_full=20,
-        threshold_empty=0.1,
-        threshold_full=0.9,
     ) -> None:
         self._pin = Pin(pin_number, Pin.IN, Pin.PULL_UP)
         self._interval = interval_ms
         self._samples_empty = samples_empty
         self._samples_full = samples_full
-        self._threshold_empty = threshold_empty
-        self._threshold_full = threshold_full
 
         # Initialize sample buffer with zeros
         self._samples = [0.0] * max(self._samples_empty, self._samples_full)
@@ -63,25 +56,23 @@ class Swimmer:
             return True
         return False
 
-    def empty(self) -> tuple[bool, float]:
+    def empty(self) -> float:
         """
-        Check if the container is empty based on recent sensor readings.
+        Return the mean of the samples to check if the container is empty.
 
         Returns:
-            float: True if the mean of recent samples is below or equal to empty threshold
+            float: mean of recent samples considered to check if empty
         """
-        average = mean(self._samples[-self._samples_empty : -1])
-        return (average <= self._threshold_empty, average)
+        return mean(self._samples[-self._samples_empty : -1])
 
-    def full(self) -> tuple[bool, float]:
+    def full(self) -> float:
         """
-        Check if the container is full based on recent sensor readings.
+        Return the mean of the samples to check if the container is full.
 
         Returns:
-            float: True if the mean of recent samples is above or equal to full threshold
+            float: mean of recent samples considered to check if full
         """
-        average = mean(self._samples[-self._samples_full : -1])
-        return (average >= self._threshold_full, average)
+        return mean(self._samples[-self._samples_full : -1])
 
     def reset(self) -> None:
         """
