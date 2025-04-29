@@ -1,11 +1,11 @@
 {
     "time_shift_hours": 0.0,
     "time_slot_length_hours": 1.0,
-    "max_fill_time_per_valve_minutes": [
-        5,
-        5,
-        5,
-        5
+    "max_fill_time_per_valve_seconds": [
+        60,
+        60,
+        60,
+        60
     ],
     "overfill_time_per_valve_seconds": [
         5,
@@ -14,8 +14,7 @@
         5
     ],
     "interval_ms": 100,
-    "samples_empty": 200,
-    "samples_full": 20,
-    "threshold_empty": 0.1,
-    "threshold_full": 0.9
+    "samples_empty": 300,
+    "samples_full": 30,
+    "threshold": 0.6
 }
