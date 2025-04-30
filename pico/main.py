@@ -80,7 +80,7 @@ def main():
                     # Fill the current olla if it is empty
                     if not filling and swimmers[sequence_index].empty() < threshold:
                         print(
-                            f"Olla {sequence_index} is empty, start filling valve {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
+                            f"Olla {sequence_index} is empty, start filling valve at pin {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
                         )
                         valves[sequence_index].on()
                         filling = True
@@ -89,7 +89,7 @@ def main():
                     elif not filling and swimmers[sequence_index].full() >= threshold:
                         print(f"Olla {sequence_index} is full")
                         sequence_index += 1
-                    # Stop filling if it has been filled or the maximum fill time has been reached
+                    # Stop filling if it has been filled
                     elif filling and swimmers[sequence_index].full() >= threshold:
                         print(
                             f"Filled olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
@@ -100,6 +100,7 @@ def main():
                         filling = False
                         overfilling = True
                         starting_time = time.ticks_ms()
+                    # or the maximum fill time has been reached
                     elif (
                         filling
                         and time.ticks_diff(time.ticks_ms(), starting_time) / 1000
@@ -108,6 +109,7 @@ def main():
                         print(
                             f"Filled olla {sequence_index} for the max fill time of {max_fill_time_s[sequence_index]}s"
                         )
+                        valves[sequence_index].off()
                         filling = False
                         log_error(
                             f"Stopped filling olla {sequence_index} due to max fill time"
