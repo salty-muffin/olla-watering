@@ -2,16 +2,16 @@
     "time_shift_hours": 0.0,
     "time_slot_length_hours": 1.0,
     "max_fill_time_per_valve_seconds": [
-        60,
-        60,
-        60,
-        60
+        1000,
+        1000,
+        1000,
+        1000
     ],
     "overfill_time_per_valve_seconds": [
-        5,
-        5,
-        5,
-        5
+        1,
+        1,
+        1,
+        1
     ],
     "interval_ms": 100,
     "samples_empty": 300,
