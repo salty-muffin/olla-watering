@@ -1,0 +1,25 @@
+Importing settings
+max_fill_time_per_valve_seconds: [1000, 1000, 1000, 1000]
+threshold: 0.6
+samples_empty: 300
+interval_ms: 100
+time_slot_length_hours: 1.0
+overfill_time_per_valve_seconds: [1, 1, 1, 1]
+time_shift_hours: 0.0
+samples_full: 30
+Initializing sensor data stack for 30.0s...
+Time slot is now, starting watering program...
+Olla 0 (BIG) is full
+Olla 1 is empty, start filling valve at pin 8 for max 1000s...
+Filled olla 1 (BIG/LEAKY) in 827.949s
+Now topping off for 1s
+Topped off olla 1 in 1.004s
+Olla 2 is empty, start filling valve at pin 7 for max 1000s...
+Filled olla 2 (NORMAL) in 832.279s
+Now topping off for 1s
+Topped off olla 2 in 1.006s
+Olla 3 is empty, start filling valve at pin 6 for max 1000s...
+Filled olla 3 (NORMAL) in 887.574s
+Now topping off for 1s
+Topped off olla 3 in 1.005s
+All ollas have been checked and are full, ending watering program for today
