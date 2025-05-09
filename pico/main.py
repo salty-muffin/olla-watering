@@ -2,17 +2,37 @@ import json
 from swimmer import Swimmer
 import time
 from machine import Pin, RTC, Timer
+import machine
 
 VALVE_PINS = [9, 8, 7, 6]
 SWIMMER_PINS = [5, 4, 3, 2]
 
 
 def main():
+    # Underclock the cpu
+    machine.freq(48_000_000)
+    print(f"CPU runs at {machine.freq()}Hz")
+
     # Setup
     led = Pin("LED", Pin.OUT)
 
     # Initialize timer for error blinking
     timer = Timer(-1)
+
+    # Initialize RTC
+    rtc = RTC()
+    rtc.datetime((2025, 5, 1, 0, 0, 0, 0, 0))
+    print(f"Time initialized: {rtc.datetime()}")
+
+    def print_timestamp(*values) -> None:
+        print(
+            f"[{get_datetime_string(rtc.datetime())}]",
+            *values,
+        )
+
+    def log_error(error: str, error_file="errors.log"):
+        with open(error_file, "a") as file:
+            file.write(f"[{get_datetime_string(rtc.datetime())}] {error}\n")
 
     # Open and read the JSON file
     print("Importing settings")
@@ -33,29 +53,27 @@ def main():
     for valve in valves:
         valve.off()
 
+    # Copy Settings for easier readability
+    overfill_times_s = settings["overfill_time_per_valve_seconds"]
+    max_fill_time_s = settings["max_fill_time_per_valve_seconds"]
+    interval_ms = settings["interval_ms"]
+    samples_empty = settings["samples_empty"]
+    samples_full = settings["samples_full"]
+    time_shift_h = settings["time_shift_hours"]
+    time_slot_length_h = settings["time_slot_length_hours"]
+    threshold = settings["threshold"]
+
     try:
-        # Copy Settings for easier readability
-        overfill_times_s = settings["overfill_time_per_valve_seconds"]
-        max_fill_time_s = settings["max_fill_time_per_valve_seconds"]
-        interval_ms = settings["interval_ms"]
-        samples_empty = settings["samples_empty"]
-        samples_full = settings["samples_full"]
-        time_shift_h = settings["time_shift_hours"]
-        time_slot_length_h = settings["time_slot_length_hours"]
-        threshold = settings["threshold"]
-
-        # Initialize RTC
-        rtc = RTC()
-        rtc.datetime((2025, 5, 1, 0, 0, 0, 0, 0))
-
         # Fill sensor data one full time
+        led.on()
         starting_time = time.ticks_ms()
         full_cycle = interval_ms * max(samples_empty, samples_full)
-        print(f"Initializing sensor data stack for {full_cycle / 1000}s...")
+        print_timestamp(f"Initializing sensor data stack for {full_cycle / 1000}s...")
         while time.ticks_diff(time.ticks_ms(), starting_time) < full_cycle:
             for swimmer in swimmers:
                 swimmer.update()
             time.sleep_ms(10)
+        led.off()
 
         # Loop
         sequence_index = len(swimmers)
@@ -67,7 +85,7 @@ def main():
             # Start the sequence only at the beginning of the timeslot
             if check_time_slot(time_shift_h, time_slot_length_h, rtc.datetime()):
                 if not time_slot:
-                    print("Time slot is now, starting watering program...")
+                    print_timestamp("Time slot is now, starting watering program...")
                     sequence_index = 0
                     time_slot = True
             else:
@@ -83,7 +101,7 @@ def main():
                     if not overfilling:
                         # Fill the current olla if it is empty
                         if not filling and swimmers[sequence_index].empty() < threshold:
-                            print(
+                            print_timestamp(
                                 f"Olla {sequence_index} is empty, start filling valve at pin {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
                             )
                             valves[sequence_index].on()
@@ -93,14 +111,14 @@ def main():
                         elif (
                             not filling and swimmers[sequence_index].full() >= threshold
                         ):
-                            print(f"Olla {sequence_index} is full")
+                            print_timestamp(f"Olla {sequence_index} is full")
                             sequence_index += 1
                         # Stop filling if it has been filled
                         elif filling and swimmers[sequence_index].full() >= threshold:
-                            print(
+                            print_timestamp(
                                 f"Filled olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
                             )
-                            print(
+                            print_timestamp(
                                 f"Now topping off for {overfill_times_s[sequence_index]}s"
                             )
                             filling = False
@@ -112,7 +130,7 @@ def main():
                             and time.ticks_diff(time.ticks_ms(), starting_time) / 1000
                             >= max_fill_time_s[sequence_index]
                         ):
-                            print(
+                            print_timestamp(
                                 f"Filled olla {sequence_index} for the max fill time of {max_fill_time_s[sequence_index]}s"
                             )
                             valves[sequence_index].off()
@@ -128,14 +146,14 @@ def main():
                         time.ticks_diff(time.ticks_ms(), starting_time) / 1000
                         >= overfill_times_s[sequence_index]
                     ):
-                        print(
+                        print_timestamp(
                             f"Topped off olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
                         )
                         valves[sequence_index].off()
                         overfilling = False
                         sequence_index += 1
                 except Exception as e:
-                    print(f"Error filling ollas: {e}")
+                    print_timestamp(f"Error filling ollas: {e}")
                     for valve in valves:
                         valve.off()
                     log_error(str(e))
@@ -143,7 +161,7 @@ def main():
 
             # Shut all valves if sequence is over as a precaution
             if sequence_index == len(swimmers):
-                print(
+                print_timestamp(
                     "All ollas have been checked and are full, ending watering program for today"
                 )
                 for valve in valves:
@@ -197,6 +215,23 @@ def error_blinking(led: Pin, timer: Timer, blocking=True) -> None:
 def log_error(error: str, error_file="errors.log"):
     with open(error_file, "a") as file:
         file.write(f"[{time.ticks_ms() / 1000}] {error}\n")
+
+
+def zfl(s, width):
+    # Pads the provided string with leading 0's to suit the specified 'chrs' length
+    # Force # characters, fill with leading 0's
+    return "{:0>{w}}".format(s, w=width)
+
+
+def get_datetime_string(dt: tuple) -> str:
+    year = zfl(str(dt[0]), 4)
+    month = zfl(str(dt[1]), 2)
+    day = zfl(str(dt[2]), 2)
+    hour = zfl(str(dt[4]), 2)
+    minute = zfl(str(dt[5]), 2)
+    second = zfl(str(dt[6]), 2)
+
+    return f"{year}/{month}/{day} {hour}:{minute}:{second}"
 
 
 if __name__ == "__main__":
