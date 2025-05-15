@@ -76,7 +76,7 @@ def main():
         led.off()
 
         # Loop
-        sequence_index = len(swimmers)
+        sequence_index = len(swimmers) + 1
         filling = False
         overfilling = False
         time_slot = False
@@ -191,7 +191,8 @@ def check_time_slot(
     Returns:
         bool: True if the current time is within the time slot, False otherwise.
     """
-    return time_shift_hours <= now[4] <= time_slot_length_hours + time_shift_hours
+    return time_shift_hours <= now[4] < time_slot_length_hours + time_shift_hours
+    # return not bool(now[4] % 2)
 
 
 def error_blinking(led: Pin, timer: Timer, blocking=True) -> None:
