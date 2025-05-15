@@ -63,8 +63,7 @@ def main():
     time_slot_length_h = settings["time_slot_length_hours"]
     threshold = settings["threshold"]
 
-    try:
-        # Fill sensor data one full time
+    def fill_sensor_stack() -> None:
         led.on()
         starting_time = time.ticks_ms()
         full_cycle = interval_ms * max(samples_empty, samples_full)
@@ -73,6 +72,12 @@ def main():
             for swimmer in swimmers:
                 swimmer.update()
             time.sleep_ms(10)
+        led.off()
+
+    try:
+        # Fill sensor data one full time
+        led.on()
+        fill_sensor_stack()
         led.off()
 
         # Loop
