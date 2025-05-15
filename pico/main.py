@@ -75,11 +75,6 @@ def main():
         led.off()
 
     try:
-        # Fill sensor data one full time
-        led.on()
-        fill_sensor_stack()
-        led.off()
-
         # Loop
         sequence_index = len(swimmers) + 1
         filling = False
@@ -93,76 +88,90 @@ def main():
                     print_timestamp("Time slot is now, starting watering program...")
                     sequence_index = 0
                     time_slot = True
+
+                    # Fill sensor data one full time
+                    led.on()
+                    fill_sensor_stack()
+                    led.off()
             else:
                 if time_slot:
                     time_slot = False
 
-            # Update all swimmers
-            updated = any([swimmer.update() for swimmer in swimmers])
-
             # Fill ollas if in sequence
-            if updated and sequence_index < len(swimmers):
-                try:
-                    if not overfilling:
-                        # Fill the current olla if it is empty
-                        if not filling and swimmers[sequence_index].empty() < threshold:
-                            print_timestamp(
-                                f"Olla {sequence_index} is empty, start filling valve at pin {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
-                            )
-                            valves[sequence_index].on()
-                            filling = True
-                            starting_time = time.ticks_ms()
-                        # Skip it if it is still full
+            if sequence_index < len(swimmers):
+                # Update all swimmers
+                updated = any([swimmer.update() for swimmer in swimmers])
+
+                # If there was an update, evaluate switches and valves
+                if updated:
+                    try:
+                        if not overfilling:
+                            # Fill the current olla if it is empty
+                            if (
+                                not filling
+                                and swimmers[sequence_index].empty() < threshold
+                            ):
+                                print_timestamp(
+                                    f"Olla {sequence_index} is empty, start filling valve at pin {VALVE_PINS[sequence_index]} for max {max_fill_time_s[sequence_index]}s..."
+                                )
+                                valves[sequence_index].on()
+                                filling = True
+                                starting_time = time.ticks_ms()
+                            # Skip it if it is still full
+                            elif (
+                                not filling
+                                and swimmers[sequence_index].full() >= threshold
+                            ):
+                                print_timestamp(f"Olla {sequence_index} is full")
+                                sequence_index += 1
+                            # Stop filling if it has been filled
+                            elif (
+                                filling and swimmers[sequence_index].full() >= threshold
+                            ):
+                                print_timestamp(
+                                    f"Filled olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
+                                )
+                                print_timestamp(
+                                    f"Now topping off for {overfill_times_s[sequence_index]}s"
+                                )
+                                filling = False
+                                overfilling = True
+                                starting_time = time.ticks_ms()
+                            # or the maximum fill time has been reached
+                            elif (
+                                filling
+                                and time.ticks_diff(time.ticks_ms(), starting_time)
+                                / 1000
+                                >= max_fill_time_s[sequence_index]
+                            ):
+                                print_timestamp(
+                                    f"Filled olla {sequence_index} for the max fill time of {max_fill_time_s[sequence_index]}s"
+                                )
+                                valves[sequence_index].off()
+                                filling = False
+                                log_error(
+                                    f"Stopped filling olla {sequence_index} due to max fill time"
+                                )
+                                sequence_index += 1
+                                error_blinking(led, timer, blocking=False)
+
+                        # After filling, possibly top it off a bit longer
                         elif (
-                            not filling and swimmers[sequence_index].full() >= threshold
-                        ):
-                            print_timestamp(f"Olla {sequence_index} is full")
-                            sequence_index += 1
-                        # Stop filling if it has been filled
-                        elif filling and swimmers[sequence_index].full() >= threshold:
-                            print_timestamp(
-                                f"Filled olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
-                            )
-                            print_timestamp(
-                                f"Now topping off for {overfill_times_s[sequence_index]}s"
-                            )
-                            filling = False
-                            overfilling = True
-                            starting_time = time.ticks_ms()
-                        # or the maximum fill time has been reached
-                        elif (
-                            filling
-                            and time.ticks_diff(time.ticks_ms(), starting_time) / 1000
-                            >= max_fill_time_s[sequence_index]
+                            time.ticks_diff(time.ticks_ms(), starting_time) / 1000
+                            >= overfill_times_s[sequence_index]
                         ):
                             print_timestamp(
-                                f"Filled olla {sequence_index} for the max fill time of {max_fill_time_s[sequence_index]}s"
+                                f"Topped off olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
                             )
                             valves[sequence_index].off()
-                            filling = False
-                            log_error(
-                                f"Stopped filling olla {sequence_index} due to max fill time"
-                            )
+                            overfilling = False
                             sequence_index += 1
-                            error_blinking(led, timer, blocking=False)
-
-                    # After filling, possibly top it off a bit longer
-                    elif (
-                        time.ticks_diff(time.ticks_ms(), starting_time) / 1000
-                        >= overfill_times_s[sequence_index]
-                    ):
-                        print_timestamp(
-                            f"Topped off olla {sequence_index} in {time.ticks_diff(time.ticks_ms(), starting_time) / 1000}s"
-                        )
-                        valves[sequence_index].off()
-                        overfilling = False
-                        sequence_index += 1
-                except Exception as e:
-                    print_timestamp(f"Error filling ollas: {e}")
-                    for valve in valves:
-                        valve.off()
-                    log_error(str(e))
-                    error_blinking(led, timer, blocking=False)
+                    except Exception as e:
+                        print_timestamp(f"Error filling ollas: {e}")
+                        for valve in valves:
+                            valve.off()
+                        log_error(str(e))
+                        error_blinking(led, timer, blocking=False)
 
             # Shut all valves if sequence is over as a precaution
             if sequence_index == len(swimmers):
