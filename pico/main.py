@@ -24,11 +24,8 @@ def main():
     rtc.datetime((2025, 5, 1, 0, 0, 0, 0, 0))
     print(f"Time initialized: {rtc.datetime()}")
 
-    def print_timestamp(*values) -> None:
-        print(
-            f"[{get_datetime_string(rtc.datetime())}]",
-            *values,
-        )
+    def print_timestamp(*values, **kwargs) -> None:
+        print(f"[{get_datetime_string(rtc.datetime())}]", *values, **kwargs)
 
     def log_error(error: str, error_file="errors.log"):
         with open(error_file, "a") as file:
@@ -183,7 +180,13 @@ def main():
                 sequence_index += 1
 
             # Sleep a little bit in every loop to keep the cpu chill
-            time.sleep_ms(10)
+            if sequence_index > len(swimmers):
+                print_timestamp("Sleep for 60s...")
+                machine.lightsleep(59_000)
+                print_timestamp("Woken up")
+                time.sleep_ms(1_000)
+            else:
+                time.sleep_ms(10)
     except KeyboardInterrupt:
         print("Exiting...")
         for valve in valves:
@@ -205,8 +208,8 @@ def check_time_slot(
     Returns:
         bool: True if the current time is within the time slot, False otherwise.
     """
-    return time_shift_hours <= now[4] < time_slot_length_hours + time_shift_hours
-    # return not bool(now[4] % 2)
+    # return time_shift_hours <= now[4] < time_slot_length_hours + time_shift_hours
+    return not bool(now[4] % 2)
 
 
 def error_blinking(led: Pin, timer: Timer, blocking=True) -> None:
